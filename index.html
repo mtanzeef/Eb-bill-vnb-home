@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TANGEDCO EB Bill & Meter Reading Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <style>
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen antialiased">
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full px-4 sm:px-0 pointer-events-none"></div>
+
+  <!-- Top Navigation -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2.5 min-w-0">
+        <div class="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
+          <i data-lucide="zap" class="w-5 h-5"></i>
+        </div>
+        <div class="min-w-0">
+          <h1 class="text-base sm:text-lg font-bold text-slate-900 truncate">TANGEDCO EB Tracker</h1>
+          <p id="headerCycleLabel" class="text-xs text-slate-500 truncate">Bi-Monthly Domestic (LT-1A) • 2026 Tariff</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button id="btnOpenSettings" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition">
+          <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Cycle & Limits</span>
+          <span class="sm:hidden">Settings</span>
+        </button>
+        <button id="btnShareWhatsAppTop" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-sm">
+          <i data-lucide="share-2" class="w-4 h-4"></i>
+          <span>Share</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-6 space-y-5">
+
+    <!-- Sample Data Notice Banner -->
+    <div id="sampleBanner" class="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="flex items-start sm:items-center gap-2.5 text-sm text-indigo-900">
+        <i data-lucide="info" class="w-4 h-4 text-indigo-600 shrink-0 mt-0.5 sm:mt-0"></i>
+        <span>Showing sample bi-monthly meter readings so you can preview the charts and warnings. Clear anytime to track your own EB meter.</span>
+      </div>
+      <button id="btnClearSample" type="button" class="self-start sm:self-auto shrink-0 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition">
+        Start Fresh (Clear Sample)
+      </button>
+    </div>
+
+    <!-- Dynamic Warning / Limit Status Banner -->
+    <div id="statusBanner" class="rounded-2xl border p-4 sm:p-5 transition-colors">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-start gap-3">
+          <div id="statusIconWrap" class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0">
+            <i id="statusIcon" data-lucide="shield-check" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="flex flex-wrap items-center gap-2">
+              <h2 id="statusTitle" class="text-base font-bold">Within Safe Limit</h2>
+              <span id="statusBadge" class="text-xs font-semibold px-2.5 py-0.5 rounded-full">SAFE</span>
+            </div>
+            <p id="statusMessage" class="text-sm mt-0.5"></p>
+          </div>
+        </div>
+        <div class="text-left sm:text-right shrink-0">
+          <div class="text-xs uppercase tracking-wider font-semibold opacity-75">500-Unit Cliff Buffer</div>
+          <div id="cliffBufferText" class="text-lg font-extrabold tabular-nums">-- units left</div>
+        </div>
+      </div>
+      <!-- Progress Bar toward Max Limit -->
+      <div class="mt-4">
+        <div class="flex justify-between text-xs font-medium mb-1.5 tabular-nums">
+          <span id="progressLabelLeft">0 units</span>
+          <span id="progressLabelMid">Warning: 400u</span>
+          <span id="progressLabelRight">Max Limit: 500u</span>
+        </div>
+        <div class="w-full h-3 bg-white/70 rounded-full overflow-hidden border border-black/10 relative">
+          <div id="progressBarFill" class="h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+          <div id="warnMarker" class="absolute top-0 bottom-0 w-0.5 bg-amber-600/80" style="left: 80%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI Summary Grid -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <div class="flex items-center justify-between text-xs font-medium text-slate-500">
+          <span>Units Consumed</span>
+          <i data-lucide="activity" class="w-4 h-4 text-emerald-600"></i>
+        </div>
+        <div id="kpiUnits" class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1.5 tabular-nums">0</div>
+        <div id="kpiUnitsSub" class="text-xs text-slate-500 mt-1 tabular-nums">Opening: 0 kWh</div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <div class="flex items-center justify-between text-xs font-medium text-slate-500">
+          <span>Estimated EB Bill</span>
+          <i data-lucide="indian-rupee" class="w-4 h-4 text-blue-600"></i>
+        </div>
+        <div id="kpiBill" class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1.5 tabular-nums">₹0</div>
+        <div id="kpiBillSub" class="text-xs text-slate-500 mt-1 tabular-nums">Tier 1 (≤500u)</div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <div class="flex items-center justify-between text-xs font-medium text-slate-500">
+          <span>Cycle Progress</span>
+          <i data-lucide="calendar-days" class="w-4 h-4 text-violet-600"></i>
+        </div>
+        <div id="kpiCycleDays" class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1.5 tabular-nums">--</div>
+        <div id="kpiCycleSub" class="text-xs text-slate-500 mt-1 tabular-nums">Avg: -- u/day</div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+        <div class="flex items-center justify-between text-xs font-medium text-slate-500">
+          <span>Projected Cycle End</span>
+          <i data-lucide="trending-up" class="w-4 h-4 text-amber-600"></i>
+        </div>
+        <div id="kpiProjected" class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1.5 tabular-nums">--</div>
+        <div id="kpiProjectedSub" class="text-xs text-slate-500 mt-1 tabular-nums">Est. bill: --</div>
+      </div>
+    </section>
+
+    <!-- Entry Form + Charts Grid -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+      <!-- Left: Add Reading Form (5 cols) -->
+      <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-4">
+            <div>
+              <h2 class="text-base font-bold text-slate-900">Enter Meter Reading</h2>
+              <p class="text-xs text-slate-500">Anyone with this page can log a reading</p>
+            </div>
+            <div class="text-right">
+              <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span id="liveClockDisplay" class="tabular-nums">--:--</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Entry Mode Toggle -->
+          <div class="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl mb-4">
+            <button id="modeMeterBtn" type="button" class="py-1.5 px-3 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-sm transition">
+              Meter Reading (kWh)
+            </button>
+            <button id="modeUnitsBtn" type="button" class="py-1.5 px-3 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition">
+              Direct Units (+kWh)
+            </button>
+          </div>
+
+          <form id="readingForm" class="space-y-3.5">
+            <div>
+              <label id="inputValueLabel" for="readingValueInput" class="block text-xs font-semibold text-slate-700 mb-1">
+                Current Meter Reading (kWh)
+              </label>
+              <input id="readingValueInput" type="number" step="0.1" min="0" required placeholder="e.g. 14650"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-base font-semibold tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" />
+              <p id="inputHint" class="text-xs text-slate-500 mt-1 tabular-nums">Last reading: --</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label for="readingAuthorInput" class="block text-xs font-semibold text-slate-700 mb-1">Entered By (Optional)</label>
+                <input id="readingAuthorInput" type="text" maxlength="30" placeholder="e.g. Karthik / Home"
+                  class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              </div>
+              <div>
+                <label for="readingNoteInput" class="block text-xs font-semibold text-slate-700 mb-1">Note (Optional)</label>
+                <input id="readingNoteInput" type="text" maxlength="50" placeholder="e.g. Morning check"
+                  class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              </div>
+            </div>
+
+            <!-- Automatic Date/Time vs Manual Override -->
+            <div class="pt-1">
+              <label class="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-600">
+                <input id="manualTimeToggle" type="checkbox" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                <span>Override automatic date &amp; time</span>
+              </label>
+              <div id="manualTimeWrap" class="hidden mt-2">
+                <input id="manualDateTimeInput" type="datetime-local"
+                  class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+              </div>
+            </div>
+
+            <button type="submit" class="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i>
+              <span>Add Reading Now</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Quick WhatsApp Share Strip -->
+        <div class="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+          <span class="text-xs text-slate-500">Share updated chart &amp; entry link:</span>
+          <div class="flex items-center gap-2">
+            <button id="btnCopyLinkInline" type="button" class="px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition">
+              Copy Link
+            </button>
+            <button id="btnWhatsAppInline" type="button" class="px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-green-600 hover:bg-green-700 text-white transition">
+              WhatsApp
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Cumulative Units & Limit Chart (7 cols) -->
+      <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 class="text-base font-bold text-slate-900">Cumulative Units &amp; Limit Chart</h2>
+            <p class="text-xs text-slate-500">Tracks usage across your bill cycle against warning &amp; max limits</p>
+          </div>
+          <div class="flex items-center gap-3 text-xs font-medium">
+            <span class="inline-flex items-center gap-1.5 text-amber-700"><span class="w-3 h-0.5 bg-amber-500 inline-block"></span> Warn</span>
+            <span class="inline-flex items-center gap-1.5 text-rose-700"><span class="w-3 h-0.5 bg-rose-600 inline-block"></span> Max</span>
+          </div>
+        </div>
+        <div class="relative h-72 w-full">
+          <canvas id="cumulativeChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Second Row: Slab Breakdown Table + Daily/Slab Chart -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+      <!-- TANGEDCO Slab Breakdown Table (7 cols) -->
+      <div class="lg:col-span-7 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <div>
+            <h2 class="text-base font-bold text-slate-900">TANGEDCO Slab-Wise Bill Breakdown</h2>
+            <p id="slabSubtitle" class="text-xs text-slate-500">Bi-monthly telescopic domestic tariff (LT-1A)</p>
+          </div>
+          <span id="tierPill" class="self-start sm:self-auto text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+            Tier 1: ≤ 500 Units (200 Free)
+          </span>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm text-left border-collapse">
+            <thead>
+              <tr class="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase">
+                <th class="py-2.5 pr-3">Slab Range</th>
+                <th class="py-2.5 px-3 text-right">Units</th>
+                <th class="py-2.5 px-3 text-right">Rate (₹/u)</th>
+                <th class="py-2.5 pl-3 text-right">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="slabTableBody" class="divide-y divide-slate-100 tabular-nums"></tbody>
+            <tfoot id="slabTableFoot" class="border-t-2 border-slate-200 font-bold text-slate-900 tabular-nums"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <!-- Bar Chart: Slab Cost or Daily Usage (5 cols) -->
+      <div class="lg:col-span-5 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+        <div class="flex items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 class="text-base font-bold text-slate-900">Cost &amp; Usage Breakdown</h2>
+            <p class="text-xs text-slate-500">Switch between interval usage &amp; slab cost</p>
+          </div>
+          <div class="inline-flex p-0.5 bg-slate-100 rounded-lg text-xs font-semibold">
+            <button id="barModeInterval" type="button" class="px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm">Intervals</button>
+            <button id="barModeSlab" type="button" class="px-2.5 py-1 rounded-md text-slate-600">Slab ₹</button>
+          </div>
+        </div>
+        <div class="relative h-72 w-full">
+          <canvas id="breakdownChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Reading Log Table -->
+    <section class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-base font-bold text-slate-900">Reading History Log</h2>
+          <p class="text-xs text-slate-500">Automatic date &amp; time recorded for every entry</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnExportCsv" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 transition">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Export CSV</span>
+          </button>
+          <button id="btnClearAllReadings" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-rose-200 hover:bg-rose-50 text-rose-700 transition">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <span>Clear All</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase">
+              <th class="py-2.5 pr-3">Date &amp; Time</th>
+              <th class="py-2.5 px-3 text-right">Meter (kWh)</th>
+              <th class="py-2.5 px-3 text-right">Added</th>
+              <th class="py-2.5 px-3 text-right">Cycle Total</th>
+              <th class="py-2.5 px-3 text-right">Est. Bill</th>
+              <th class="py-2.5 px-3">By / Note</th>
+              <th class="py-2.5 pl-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody id="logTableBody" class="divide-y divide-slate-100 tabular-nums"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 z-40 hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-xl border border-slate-200 p-5 sm:p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold text-slate-900">Bill Cycle &amp; Limit Settings</h3>
+        <button id="btnCloseSettings" type="button" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="settingsForm" class="space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label for="setCycleStart" class="block text-xs font-semibold text-slate-700 mb-1">Bill Cycle Start Date</label>
+            <input id="setCycleStart" type="date" required class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm" />
+          </div>
+          <div>
+            <label for="setCycleEnd" class="block text-xs font-semibold text-slate-700 mb-1">Bill Cycle End Date</label>
+            <input id="setCycleEnd" type="date" required class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm" />
+          </div>
+        </div>
+
+        <div>
+          <label for="setOpeningReading" class="block text-xs font-semibold text-slate-700 mb-1">Opening Meter Reading at Cycle Start (kWh)</label>
+          <input id="setOpeningReading" type="number" step="0.1" min="0" required class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm tabular-nums" />
+          <p class="text-xs text-slate-500 mt-1">Units consumed = Current Meter Reading − Opening Meter Reading.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label for="setWarnLimit" class="block text-xs font-semibold text-amber-700 mb-1">Warning Limit (Units)</label>
+            <input id="setWarnLimit" type="number" min="1" required class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm tabular-nums" />
+          </div>
+          <div>
+            <label for="setMaxLimit" class="block text-xs font-semibold text-rose-700 mb-1">Max Limit (Units)</label>
+            <input id="setMaxLimit" type="number" min="1" required class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm tabular-nums" />
+          </div>
+          <div>
+            <label for="setBudgetLimit" class="block text-xs font-semibold text-slate-700 mb-1">Budget Cap (₹)</label>
+            <input id="setBudgetLimit" type="number" min="0" required class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm tabular-nums" />
+          </div>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+          <label class="flex items-center justify-between cursor-pointer">
+            <div>
+              <div class="text-xs font-semibold text-slate-800">Include Fixed Charge &amp; FSA</div>
+              <div class="text-xs text-slate-500">Standard bi-monthly fixed charge + Fuel Surcharge Adjustment</div>
+            </div>
+            <input id="setIncludeExtras" type="checkbox" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 w-4 h-4" />
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="setFixedCharge" class="block text-xs font-medium text-slate-600 mb-1">Fixed Charge (₹/2mo)</label>
+              <input id="setFixedCharge" type="number" step="1" min="0" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm tabular-nums bg-white" />
+            </div>
+            <div>
+              <label for="setFsaRate" class="block text-xs font-medium text-slate-600 mb-1">FSA Rate (₹/unit)</label>
+              <input id="setFsaRate" type="number" step="0.01" min="0" class="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm tabular-nums bg-white" />
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-2">
+          <button id="btnCancelSettings" type="button" class="px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-sm font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Save Settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- WhatsApp & Link Share Modal -->
+  <div id="shareModal" class="fixed inset-0 z-40 hidden bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full shadow-xl border border-slate-200 p-5 sm:p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-slate-900">Share on WhatsApp</h3>
+        <button id="btnCloseShare" type="button" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-600">
+        Your bill cycle, limits, and all logged readings are encoded right inside the link below. Anyone who opens the link can view the chart and enter a new meter reading.
+      </p>
+
+      <div>
+        <label class="block text-xs font-semibold text-slate-700 mb-1">WhatsApp Message Preview</label>
+        <textarea id="sharePreviewText" rows="6" readonly class="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 text-xs font-mono text-slate-800 focus:outline-none"></textarea>
+      </div>
+
+      <div id="localFileNote" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
+        <strong>Tip for clickable WhatsApp links:</strong> You are currently viewing this page from a local or preview address. Host this single HTML file on any free static host (like Netlify Drop or GitHub Pages) to get a clickable <code class="font-mono">https://</code> link for WhatsApp.
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-2.5">
+        <button id="btnCopyShareLink" type="button" class="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-800 font-semibold text-sm flex items-center justify-center gap-2 transition">
+          <i data-lucide="copy" class="w-4 h-4"></i>
+          <span>Copy Share Link</span>
+        </button>
+        <a id="btnLaunchWhatsApp" href="#" target="_blank" rel="noopener noreferrer" class="flex-1 py-2.5 px-4 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold text-sm flex items-center justify-center gap-2 transition">
+          <i data-lucide="message-circle" class="w-4 h-4"></i>
+          <span>Send via WhatsApp</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const STORAGE_KEY = 'tangedco_eb_tracker_v1';
+
+      const DEFAULT_STATE = {
+        isSample: true,
+        entryMode: 'meter', // 'meter' | 'units'
+        barMode: 'interval', // 'interval' | 'slab'
+        settings: {
+          cycleStart: '2026-10-01',
+          cycleEnd: '2026-11-30',
+          openingReading: 14200,
+          warnLimit: 400,
+          maxLimit: 500,
+          budgetLimit: 1650,
+          includeExtras: true,
+          fixedCharge: 45,
+          fsaRate: 0.20
+        },
+        readings: [
+          { id: 'r1', timestamp: '2026-10-05T09:15:00', meter: 14242, author: 'Home', note: 'Cycle start check' },
+          { id: 'r2', timestamp: '2026-10-15T18:30:00', meter: 14328, author: 'Home', note: 'Mid-Oct check' },
+          { id: 'r3', timestamp: '2026-10-25T20:10:00', meter: 14415, author: 'Karthik', note: 'AC usage high' },
+          { id: 'r4', timestamp: '2026-11-05T08:45:00', meter: 14508, author: 'Home', note: 'Morning check' },
+          { id: 'r5', timestamp: '2026-11-15T19:20:00', meter: 14592, author: 'Karthik', note: 'Evening reading' },
+          { id: 'r6', timestamp: '2026-11-20T21:00:00', meter: 14638, author: 'Home', note: 'Approaching 450u' }
+        ]
+      };
+
+      let appState = loadInitialState();
+      let cumulativeChartInstance = null;
+      let breakdownChartInstance = null;
+
+      // --- State Persistence & URL Hash Encoding ---
+      function encodeStateToHash(stateObj) {
+        try {
+          const compact = {
+            s: stateObj.settings,
+            r: stateObj.readings.map(x => [x.timestamp, x.meter, x.author || '', x.note || '']),
+            m: stateObj.isSample ? 1 : 0
+          };
+          const json = JSON.stringify(compact);
+          const bytes = new TextEncoder().encode(json);
+          let bin = '';
+          bytes.forEach(b => { bin += String.fromCharCode(b); });
+          return '#s=' + btoa(bin);
+        } catch (e) {
+          return '';
+        }
+      }
+
+      function decodeStateFromHash(hash) {
+        try {
+          if (!hash || !hash.startsWith('#s=')) return null;
+          const b64 = hash.slice(3);
+          const bin = atob(b64);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const json = new TextDecoder().decode(bytes);
+          const parsed = JSON.parse(json);
+          if (!parsed || !parsed.s || !Array.isArray(parsed.r)) return null;
+          return {
+            isSample: parsed.m === 1,
+            entryMode: 'meter',
+            barMode: 'interval',
+            settings: { ...DEFAULT_STATE.settings, ...parsed.s },
+            readings: parsed.r.map((arr, idx) => ({
+              id: 'u_' + idx + '_' + Date.now(),
+              timestamp: String(arr[0]),
+              meter: Number(arr[1]),
+              author: String(arr[2] || ''),
+              note: String(arr[3] || '')
+            }))
+          };
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function loadInitialState() {
+        const fromHash = decodeStateFromHash(window.location.hash);
+        if (fromHash) return fromHash;
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.settings && Array.isArray(parsed.readings)) {
+              return {
+                ...DEFAULT_STATE,
+                ...parsed,
+                settings: { ...DEFAULT_STATE.settings, ...parsed.settings }
+              };
+            }
+          }
+        } catch (e) {}
+        return JSON.parse(JSON.stringify(DEFAULT_STATE));
+      }
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+        } catch (e) {}
+        try {
+          const newHash = encodeStateToHash(appState);
+          if (newHash && window.history && window.history.replaceState) {
+            window.history.replaceState(null, '', newHash);
+          }
+        } catch (e) {}
+      }
+
+      // --- TANGEDCO 2026 Domestic LT-1A Bi-Monthly Tariff Calculator ---
+      function calculateTangedcoBill(totalUnits, settings) {
+        const units = Math.max(0, Number(totalUnits) || 0);
+        const slabs = [];
+        let energyCharge = 0;
+        const isTier1 = units <= 500;
+
+        if (isTier1) {
+          // Tier 1: <= 500 units (200 free units under May 2026 rule)
+          const s1 = Math.min(units, 200);
+          slabs.push({ label: '0 – 200 units (Free)', units: s1, rate: 0, amount: 0 });
+
+          if (units > 200) {
+            const s2 = Math.min(units - 200, 200);
+            const amt2 = s2 * 4.70;
+            energyCharge += amt2;
+            slabs.push({ label: '201 – 400 units', units: s2, rate: 4.70, amount: amt2 });
+          }
+          if (units > 400) {
+            const s3 = Math.min(units - 400, 100);
+            const amt3 = s3 * 6.30;
+            energyCharge += amt3;
+            slabs.push({ label: '401 – 500 units', units: s3, rate: 6.30, amount: amt3 });
+          }
+        } else {
+          // Tier 2: > 500 units (100 free units only)
+          const s1 = Math.min(units, 100);
+          slabs.push({ label: '0 – 100 units (Free)', units: s1, rate: 0, amount: 0 });
+
+          const s2 = Math.min(Math.max(units - 100, 0), 300);
+          const amt2 = s2 * 4.70;
+          energyCharge += amt2;
+          slabs.push({ label: '101 – 400 units', units: s2, rate: 4.70, amount: amt2 });
+
+          const s3 = Math.min(Math.max(units - 400, 0), 100);
+          const amt3 = s3 * 6.30;
+          energyCharge += amt3;
+          slabs.push({ label: '401 – 500 units', units: s3, rate: 6.30, amount: amt3 });
+
+          const s4 = Math.min(Math.max(units - 500, 0), 100);
+          if (s4 > 0) {
+            const amt4 = s4 * 8.40;
+            energyCharge += amt4;
+            slabs.push({ label: '501 – 600 units', units: s4, rate: 8.40, amount: amt4 });
+          }
+
+          const s5 = Math.min(Math.max(units - 600, 0), 200);
+          if (s5 > 0) {
+            const amt5 = s5 * 9.45;
+            energyCharge += amt5;
+            slabs.push({ label: '601 – 800 units', units: s5, rate: 9.45, amount: amt5 });
+          }
+
+          const s6 = Math.min(Math.max(units - 800, 0), 200);
+          if (s6 > 0) {
+            const amt6 = s6 * 10.50;
+            energyCharge += amt6;
+            slabs.push({ label: '801 – 1000 units', units: s6, rate: 10.50, amount: amt6 });
+          }
+
+          const s7 = Math.max(units - 1000, 0);
+          if (s7 > 0) {
+            const amt7 = s7 * 11.55;
+            energyCharge += amt7;
+            slabs.push({ label: 'Above 1000 units', units: s7, rate: 11.55, amount: amt7 });
+          }
+        }
+
+        const fixed = settings.includeExtras ? (Number(settings.fixedCharge) || 0) : 0;
+        const fsa = settings.includeExtras ? units * (Number(settings.fsaRate) || 0) : 0;
+        const total = energyCharge + fixed + fsa;
+
+        return { isTier1, units, slabs, energyCharge, fixed, fsa, total };
+      }
+
+      // --- Helpers ---
+      function getSortedReadings() {
+        return [...appState.readings].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+      }
+
+      function formatCurrency(val) {
+        return '₹' + Math.round(val).toLocaleString('en-IN');
+      }
+
+      function formatDateTimeShort(iso) {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return iso;
+        return d.toLocaleString('en-IN', {
+          day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true
+        });
+      }
+
+      function formatDateLabel(iso) {
+        const d = new Date(iso.length === 10 ? iso + 'T00:00:00' : iso);
+        if (isNaN(d.getTime())) return iso;
+        return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      }
+
+      function toLocalDateTimeInputValue(date) {
+        const pad = n => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+      }
+
+      function showToast(message, type = 'success') {
+        const container = document.getElementById('toastContainer');
+        const el = document.createElement('div');
+        const colors = type === 'error'
+          ? 'bg-rose-600 text-white'
+          : type === 'warning'
+            ? 'bg-amber-600 text-white'
+            : 'bg-slate-900 text-white';
+        el.className = `${colors} px-4 py-2.5 rounded-xl shadow-lg text-xs sm:text-sm font-medium pointer-events-auto transition-opacity duration-300`;
+        el.textContent = message;
+        container.appendChild(el);
+        setTimeout(() => {
+          el.style.opacity = '0';
+          setTimeout(() => el.remove(), 300);
+        }, 2800);
+      }
+
+      function copyTextSafe(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => {
+            showToast('Shareable link copied!');
+          }).catch(() => fallbackCopy(text));
+        } else {
+          fallbackCopy(text);
+        }
+      }
+
+      function fallbackCopy(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand('copy');
+          showToast('Shareable link copied!');
+        } catch (e) {
+          showToast('Could not copy automatically. Please copy from the Share box.', 'warning');
+        }
+        ta.remove();
+      }
+
+      // --- Main Render ---
+      function renderAll() {
+        const s = appState.settings;
+        const sorted = getSortedReadings();
+        const opening = Number(s.openingReading) || 0;
+        const latestMeter = sorted.length > 0 ? sorted[sorted.length - 1].meter : opening;
+        const totalUnits = Math.max(0, latestMeter - opening);
+        const bill = calculateTangedcoBill(totalUnits, s);
+
+        // Sample banner
+        document.getElementById('sampleBanner').classList.toggle('hidden', !appState.isSample);
+
+        // Header cycle subtitle
+        document.getElementById('headerCycleLabel').textContent =
+          `Cycle: ${formatDateLabel(s.cycleStart)} – ${formatDateLabel(s.cycleEnd)} • TANGEDCO 2026`;
+
+        // Cycle day calculations
+        const startD = new Date(s.cycleStart + 'T00:00:00');
+        const endD = new Date(s.cycleEnd + 'T23:59:59');
+        const now = new Date();
+        const totalDays = Math.max(1, Math.round((endD - startD) / 86400000));
+        const refNow = sorted.length > 0 ? new Date(Math.max(now.getTime(), new Date(sorted[sorted.length - 1].timestamp).getTime())) : now;
+        const elapsedDays = Math.min(totalDays, Math.max(1, Math.ceil((Math.min(now.getTime(), endD.getTime()) - startD.getTime()) / 86400000)));
+        const remainingDays = Math.max(0, totalDays - elapsedDays);
+        const dailyAvg = totalUnits / Math.max(1, elapsedDays);
+        const projectedUnits = Math.round(dailyAvg * totalDays);
+        const projectedBill = calculateTangedcoBill(projectedUnits, s);
+
+        // KPIs
+        document.getElementById('kpiUnits').textContent = `${totalUnits.toFixed(1).replace(/\.0$/, '')} u`;
+        document.getElementById('kpiUnitsSub').textContent = `Meter: ${latestMeter.toLocaleString('en-IN')} kWh (Open: ${opening.toLocaleString('en-IN')})`;
+
+        document.getElementById('kpiBill').textContent = formatCurrency(bill.total);
+        document.getElementById('kpiBillSub').textContent = bill.isTier1 ? 'Tier 1 (≤500u • 200 Free)' : 'Tier 2 (>500u • 100 Free)';
+
+        document.getElementById('kpiCycleDays').textContent = `Day ${elapsedDays}/${totalDays}`;
+        document.getElementById('kpiCycleSub').textContent = `${remainingDays} days left • Avg ${dailyAvg.toFixed(1)} u/day`;
+
+        document.getElementById('kpiProjected').textContent = `${projectedUnits} u`;
+        document.getElementById('kpiProjectedSub').textContent = `Est. bill: ${formatCurrency(projectedBill.total)}`;
+
+        // Limits & Warning Status Banner
+        const warnLimit = Number(s.warnLimit) || 400;
+        const maxLimit = Number(s.maxLimit) || 500;
+        const budgetLimit = Number(s.budgetLimit) || 1650;
+
+        const banner = document.getElementById('statusBanner');
+        const iconWrap = document.getElementById('statusIconWrap');
+        const statusTitle = document.getElementById('statusTitle');
+        const statusBadge = document.getElementById('statusBadge');
+        const statusMsg = document.getElementById('statusMessage');
+        const fill = document.getElementById('progressBarFill');
+
+        const isMaxExceeded = totalUnits > maxLimit || bill.total > budgetLimit;
+        const isWarn = !isMaxExceeded && (totalUnits >= warnLimit || projectedUnits > maxLimit);
+
+        if (isMaxExceeded) {
+          banner.className = 'rounded-2xl border p-4 sm:p-5 bg-rose-50 border-rose-200 text-rose-950 transition-colors';
+          iconWrap.className = 'w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-rose-600 text-white';
+          statusTitle.textContent = totalUnits > 500 ? '500-Unit Subsidy Cliff Crossed!' : 'Limit Exceeded';
+          statusBadge.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-rose-600 text-white';
+          statusBadge.textContent = 'CRITICAL';
+          statusMsg.textContent = totalUnits > 500
+            ? `You are at ${totalUnits} units (>500). Free units dropped from 200 to 100 and higher Tier 2 slabs apply.`
+            : `Consumption (${totalUnits} u) or estimated bill (${formatCurrency(bill.total)}) exceeded your configured limit (${maxLimit} u / ${formatCurrency(budgetLimit)}).`;
+          fill.className = 'h-full rounded-full transition-all duration-500 bg-rose-600';
+        } else if (isWarn) {
+          banner.className = 'rounded-2xl border p-4 sm:p-5 bg-amber-50 border-amber-200 text-amber-950 transition-colors';
+          iconWrap.className = 'w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-amber-500 text-white';
+          statusTitle.textContent = totalUnits >= warnLimit ? 'Approaching Max Limit' : 'Projected to Exceed Limit';
+          statusBadge.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-500 text-white';
+          statusBadge.textContent = 'WARNING';
+          statusMsg.textContent = `Current usage is ${totalUnits} units (warning threshold: ${warnLimit} u). At ${dailyAvg.toFixed(1)} u/day, you may reach ${projectedUnits} units by cycle end.`;
+          fill.className = 'h-full rounded-full transition-all duration-500 bg-amber-500';
+        } else {
+          banner.className = 'rounded-2xl border p-4 sm:p-5 bg-emerald-50 border-emerald-200 text-emerald-950 transition-colors';
+          iconWrap.className = 'w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-emerald-600 text-white';
+          statusTitle.textContent = 'Within Safe Limit';
+          statusBadge.className = 'text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-600 text-white';
+          statusBadge.textContent = 'SAFE';
+          statusMsg.textContent = `Usage is ${totalUnits} units out of ${maxLimit} units max limit. Projected cycle total is ${projectedUnits} units.`;
+          fill.className = 'h-full rounded-full transition-all duration-500 bg-emerald-600';
+        }
+
+        const cliffLeft = 500 - totalUnits;
+        document.getElementById('cliffBufferText').textContent = cliffLeft >= 0
+          ? `${cliffLeft.toFixed(0)} units left`
+          : `+${Math.abs(cliffLeft).toFixed(0)} over 500u`;
+
+        const pct = Math.min(100, (totalUnits / Math.max(1, maxLimit)) * 100);
+        fill.style.width = pct.toFixed(1) + '%';
+        const warnPct = Math.min(100, (warnLimit / Math.max(1, maxLimit)) * 100);
+        document.getElementById('warnMarker').style.left = warnPct.toFixed(1) + '%';
+        document.getElementById('progressLabelMid').textContent = `Warning: ${warnLimit}u`;
+        document.getElementById('progressLabelRight').textContent = `Max: ${maxLimit}u`;
+
+        // Input hint
+        document.getElementById('inputHint').textContent = appState.entryMode === 'meter'
+          ? `Last meter reading: ${latestMeter.toLocaleString('en-IN')} kWh (${totalUnits} units used so far)`
+          : `Will add units on top of ${latestMeter.toLocaleString('en-IN')} kWh`;
+
+        // Tier pill
+        const tierPill = document.getElementById('tierPill');
+        if (bill.isTier1) {
+          tierPill.className = 'self-start sm:self-auto text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200';
+          tierPill.textContent = 'Tier 1: ≤ 500 Units (200 Free)';
+        } else {
+          tierPill.className = 'self-start sm:self-auto text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200';
+          tierPill.textContent = 'Tier 2: > 500 Units (100 Free)';
+        }
+
+        // Render Slab Table
+        const slabBody = document.getElementById('slabTableBody');
+        slabBody.innerHTML = bill.slabs.map(sl => `
+          <tr>
+            <td class="py-2.5 pr-3 font-medium text-slate-800">${sl.label}</td>
+            <td class="py-2.5 px-3 text-right text-slate-600">${sl.units.toFixed(1).replace(/\.0$/, '')}</td>
+            <td class="py-2.5 px-3 text-right text-slate-600">₹${sl.rate.toFixed(2)}</td>
+            <td class="py-2.5 pl-3 text-right font-semibold text-slate-900">₹${sl.amount.toFixed(2)}</td>
+          </tr>
+        `).join('');
+
+        const extrasRows = s.includeExtras ? `
+          <tr class="text-xs text-slate-600 font-medium">
+            <td colspan="3" class="py-2 pr-3 text-right">Fixed Charge (Bi-monthly)</td>
+            <td class="py-2 pl-3 text-right">₹${bill.fixed.toFixed(2)}</td>
+          </tr>
+          <tr class="text-xs text-slate-600 font-medium">
+            <td colspan="3" class="py-2 pr-3 text-right">FSA (${totalUnits.toFixed(0)}u × ₹${Number(s.fsaRate).toFixed(2)})</td>
+            <td class="py-2 pl-3 text-right">₹${bill.fsa.toFixed(2)}</td>
+          </tr>
+        ` : '';
+
+        document.getElementById('slabTableFoot').innerHTML = `
+          ${extrasRows}
+          <tr class="bg-slate-50">
+            <td colspan="3" class="py-3 pr-3 text-right text-sm font-bold text-slate-900">Estimated Total Bill</td>
+            <td class="py-3 pl-3 text-right text-base font-extrabold text-emerald-700">₹${bill.total.toFixed(2)}</td>
+          </tr>
+        `;
+
+        // Render Reading History Log (newest first)
+        const logBody = document.getElementById('logTableBody');
+        if (sorted.length === 0) {
+          logBody.innerHTML = `
+            <tr>
+              <td colspan="7" class="py-8 text-center text-sm text-slate-400">
+                No readings logged yet. Enter your current meter reading above to begin!
+              </td>
+            </tr>
+          `;
+        } else {
+          const rows = sorted.map((r, idx) => {
+            const prevMeter = idx === 0 ? opening : sorted[idx - 1].meter;
+            const added = r.meter - prevMeter;
+            const cumUnits = Math.max(0, r.meter - opening);
+            const rowBill = calculateTangedcoBill(cumUnits, s).total;
+            return { ...r, added, cumUnits, rowBill };
+          }).reverse();
+
+          logBody.innerHTML = rows.map(r => `
+            <tr class="hover:bg-slate-50/70">
+              <td class="py-2.5 pr-3 text-xs sm:text-sm text-slate-700 whitespace-nowrap">${formatDateTimeShort(r.timestamp)}</td>
+              <td class="py-2.5 px-3 text-right font-semibold text-slate-900">${r.meter.toLocaleString('en-IN')}</td>
+              <td class="py-2.5 px-3 text-right text-emerald-700 font-medium">+${r.added.toFixed(1).replace(/\.0$/, '')} u</td>
+              <td class="py-2.5 px-3 text-right font-semibold text-slate-800">${r.cumUnits.toFixed(1).replace(/\.0$/, '')} u</td>
+              <td class="py-2.5 px-3 text-right font-semibold text-slate-900">${formatCurrency(r.rowBill)}</td>
+              <td class="py-2.5 px-3 text-xs text-slate-600">
+                ${r.author ? `<span class="font-semibold text-slate-800">${escapeHtml(r.author)}</span>` : ''}
+                ${r.author && r.note ? ' • ' : ''}
+                ${r.note ? escapeHtml(r.note) : (!r.author ? '—' : '')}
+              </td>
+              <td class="py-2.5 pl-3 text-right">
+                <button type="button" data-delete-id="${r.id}" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition" title="Delete entry">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              </td>
+            </tr>
+          `).join('');
+        }
+
+        renderCharts(sorted, opening, warnLimit, maxLimit, bill);
+        if (window.lucide) window.lucide.createIcons();
+      }
+
+      function escapeHtml(str) {
+        return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+
+      function renderCharts(sorted, opening, warnLimit, maxLimit, bill) {
+        // 1. Cumulative Chart
+        const labels = [formatDateLabel(appState.settings.cycleStart), ...sorted.map(r => formatDateLabel(r.timestamp))];
+        const cumData = [0, ...sorted.map(r => Math.max(0, r.meter - opening))];
+        const warnSeries = labels.map(() => warnLimit);
+        const maxSeries = labels.map(() => maxLimit);
+
+        const ctx1 = document.getElementById('cumulativeChart').getContext('2d');
+        if (cumulativeChartInstance) cumulativeChartInstance.destroy();
+        cumulativeChartInstance = new Chart(ctx1, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              {
+                label: 'Cumulative Units (kWh)',
+                data: cumData,
+                borderColor: '#059669',
+                backgroundColor: 'rgba(5, 150, 105, 0.12)',
+                borderWidth: 3,
+                pointRadius: 4,
+                pointBackgroundColor: '#059669',
+                fill: true,
+                tension: 0.25
+              },
+              {
+                label: `Warning (${warnLimit}u)`,
+                data: warnSeries,
+                borderColor: '#f59e0b',
+                borderWidth: 2,
+                borderDash: [6, 5],
+                pointRadius: 0,
+                fill: false
+              },
+              {
+                label: `Max Limit (${maxLimit}u)`,
+                data: maxSeries,
+                borderColor: '#e11d48',
+                borderWidth: 2,
+                borderDash: [4, 4],
+                pointRadius: 0,
+                fill: false
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y} units`
+                }
+              }
+            },
+            scales: {
+              y: {
+                beginAtZero: true,
+                suggestedMax: Math.max(maxLimit * 1.1, ...cumData),
+                grid: { color: '#f1f5f9' },
+                title: { display: true, text: 'Units (kWh)', font: { size: 11 } }
+              },
+              x: { grid: { display: false } }
+            }
+          }
+        });
+
+        // 2. Breakdown Chart (Intervals vs Slab Cost)
+        const ctx2 = document.getElementById('breakdownChart').getContext('2d');
+        if (breakdownChartInstance) breakdownChartInstance.destroy();
+
+        if (appState.barMode === 'interval') {
+          const intLabels = sorted.map(r => formatDateLabel(r.timestamp));
+          const intData = sorted.map((r, i) => {
+            const prev = i === 0 ? opening : sorted[i - 1].meter;
+            return Math.max(0, Number((r.meter - prev).toFixed(1)));
+          });
+          breakdownChartInstance = new Chart(ctx2, {
+            type: 'bar',
+            data: {
+              labels: intLabels.length ? intLabels : ['No entries'],
+              datasets: [{
+                label: 'Units Added',
+                data: intData.length ? intData : [0],
+                backgroundColor: '#3b82f6',
+                borderRadius: 6
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                y: { beginAtZero: true, grid: { color: '#f1f5f9' }, title: { display: true, text: 'Units', font: { size: 11 } } },
+                x: { grid: { display: false } }
+              }
+            }
+          });
+        } else {
+          const slabLabels = bill.slabs.map(sl => sl.label.replace(' units', 'u').replace(' (Free)', ''));
+          const slabAmts = bill.slabs.map(sl => Number(sl.amount.toFixed(2)));
+          breakdownChartInstance = new Chart(ctx2, {
+            type: 'bar',
+            data: {
+              labels: slabLabels,
+              datasets: [{
+                label: 'Slab Cost (₹)',
+                data: slabAmts,
+                backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b'],
+                borderRadius: 6
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: { legend: { display: false } },
+              scales: {
+                y: { beginAtZero: true, grid: { color: '#f1f5f9' }, title: { display: true, text: 'Cost (₹)', font: { size: 11 } } },
+                x: { grid: { display: false } }
+              }
+            }
+          });
+        }
+      }
+
+      // --- Event Listeners ---
+      function updateLiveClock() {
+        const now = new Date();
+        document.getElementById('liveClockDisplay').textContent = now.toLocaleString('en-IN', {
+          day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
+        });
+      }
+      updateLiveClock();
+      setInterval(updateLiveClock, 1000);
+
+      document.getElementById('modeMeterBtn').addEventListener('click', () => {
+        appState.entryMode = 'meter';
+        document.getElementById('modeMeterBtn').className = 'py-1.5 px-3 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-sm transition';
+        document.getElementById('modeUnitsBtn').className = 'py-1.5 px-3 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition';
+        document.getElementById('inputValueLabel').textContent = 'Current Meter Reading (kWh)';
+        document.getElementById('readingValueInput').placeholder = 'e.g. 14650';
+        renderAll();
+      });
+
+      document.getElementById('modeUnitsBtn').addEventListener('click', () => {
+        appState.entryMode = 'units';
+        document.getElementById('modeUnitsBtn').className = 'py-1.5 px-3 text-xs font-semibold rounded-lg bg-white text-slate-900 shadow-sm transition';
+        document.getElementById('modeMeterBtn').className = 'py-1.5 px-3 text-xs font-semibold rounded-lg text-slate-600 hover:text-slate-900 transition';
+        document.getElementById('inputValueLabel').textContent = 'Units Consumed Since Last Entry (+kWh)';
+        document.getElementById('readingValueInput').placeholder = 'e.g. 25';
+        renderAll();
+      });
+
+      document.getElementById('manualTimeToggle').addEventListener('change', e => {
+        const wrap = document.getElementById('manualTimeWrap');
+        wrap.classList.toggle('hidden', !e.target.checked);
+        if (e.target.checked) {
+          document.getElementById('manualDateTimeInput').value = toLocalDateTimeInputValue(new Date());
+        }
+      });
+
+      document.getElementById('readingForm').addEventListener('submit', e => {
+        e.preventDefault();
+        const rawVal = parseFloat(document.getElementById('readingValueInput').value);
+        if (isNaN(rawVal) || rawVal < 0) {
+          showToast('Please enter a valid positive number.', 'error');
+          return;
+        }
+
+        const sorted = getSortedReadings();
+        const opening = Number(appState.settings.openingReading) || 0;
+        const latestMeter = sorted.length > 0 ? sorted[sorted.length - 1].meter : opening;
+
+        let newMeter = rawVal;
+        if (appState.entryMode === 'units') {
+          newMeter = latestMeter + rawVal;
+        } else if (rawVal < opening) {
+          showToast(`Meter reading (${rawVal}) cannot be less than cycle opening (${opening}).`, 'error');
+          return;
+        }
+
+        const useManual = document.getElementById('manualTimeToggle').checked;
+        const ts = useManual && document.getElementById('manualDateTimeInput').value
+          ? new Date(document.getElementById('manualDateTimeInput').value).toISOString()
+          : new Date().toISOString();
+
+        const author = document.getElementById('readingAuthorInput').value.trim();
+        const note = document.getElementById('readingNoteInput').value.trim();
+
+        appState.readings.push({
+          id: 'r_' + Date.now(),
+          timestamp: ts,
+          meter: Number(newMeter.toFixed(1)),
+          author,
+          note
+        });
+        appState.isSample = false;
+
+        saveState();
+        renderAll();
+        document.getElementById('readingValueInput').value = '';
+        document.getElementById('readingNoteInput').value = '';
+        showToast('Reading logged with automatic timestamp!');
+      });
+
+      // Delete single reading via delegation
+      document.getElementById('logTableBody').addEventListener('click', e => {
+        const btn = e.target.closest('[data-delete-id]');
+        if (!btn) return;
+        const id = btn.getAttribute('data-delete-id');
+        appState.readings = appState.readings.filter(r => r.id !== id);
+        appState.isSample = false;
+        saveState();
+        renderAll();
+        showToast('Reading removed.');
+      });
+
+      document.getElementById('btnClearSample').addEventListener('click', () => {
+        appState.readings = [];
+        appState.isSample = false;
+        saveState();
+        renderAll();
+        showToast('Sample data cleared. Ready for your meter readings!');
+      });
+
+      document.getElementById('btnClearAllReadings').addEventListener('click', () => {
+        appState.readings = [];
+        appState.isSample = false;
+        saveState();
+        renderAll();
+        showToast('All readings cleared.');
+      });
+
+      // Bar chart mode toggle
+      document.getElementById('barModeInterval').addEventListener('click', () => {
+        appState.barMode = 'interval';
+        document.getElementById('barModeInterval').className = 'px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm';
+        document.getElementById('barModeSlab').className = 'px-2.5 py-1 rounded-md text-slate-600';
+        renderAll();
+      });
+      document.getElementById('barModeSlab').addEventListener('click', () => {
+        appState.barMode = 'slab';
+        document.getElementById('barModeSlab').className = 'px-2.5 py-1 rounded-md bg-white text-slate-900 shadow-sm';
+        document.getElementById('barModeInterval').className = 'px-2.5 py-1 rounded-md text-slate-600';
+        renderAll();
+      });
+
+      // Settings Modal
+      const settingsModal = document.getElementById('settingsModal');
+      document.getElementById('btnOpenSettings').addEventListener('click', () => {
+        const s = appState.settings;
+        document.getElementById('setCycleStart').value = s.cycleStart;
+        document.getElementById('setCycleEnd').value = s.cycleEnd;
+        document.getElementById('setOpeningReading').value = s.openingReading;
+        document.getElementById('setWarnLimit').value = s.warnLimit;
+        document.getElementById('setMaxLimit').value = s.maxLimit;
+        document.getElementById('setBudgetLimit').value = s.budgetLimit;
+        document.getElementById('setIncludeExtras').checked = !!s.includeExtras;
+        document.getElementById('setFixedCharge').value = s.fixedCharge;
+        document.getElementById('setFsaRate').value = s.fsaRate;
+        settingsModal.classList.remove('hidden');
+      });
+
+      function closeSettings() { settingsModal.classList.add('hidden'); }
+      document.getElementById('btnCloseSettings').addEventListener('click', closeSettings);
+      document.getElementById('btnCancelSettings').addEventListener('click', closeSettings);
+
+      document.getElementById('settingsForm').addEventListener('submit', e => {
+        e.preventDefault();
+        appState.settings = {
+          cycleStart: document.getElementById('setCycleStart').value,
+          cycleEnd: document.getElementById('setCycleEnd').value,
+          openingReading: parseFloat(document.getElementById('setOpeningReading').value) || 0,
+          warnLimit: parseFloat(document.getElementById('setWarnLimit').value) || 400,
+          maxLimit: parseFloat(document.getElementById('setMaxLimit').value) || 500,
+          budgetLimit: parseFloat(document.getElementById('setBudgetLimit').value) || 1650,
+          includeExtras: document.getElementById('setIncludeExtras').checked,
+          fixedCharge: parseFloat(document.getElementById('setFixedCharge').value) || 0,
+          fsaRate: parseFloat(document.getElementById('setFsaRate').value) || 0
+        };
+        saveState();
+        renderAll();
+        closeSettings();
+        showToast('Cycle & limit settings updated!');
+      });
+
+      // Share & WhatsApp Modal
+      function buildSharePayload() {
+        saveState();
+        const s = appState.settings;
+        const sorted = getSortedReadings();
+        const opening = Number(s.openingReading) || 0;
+        const latestMeter = sorted.length > 0 ? sorted[sorted.length - 1].meter : opening;
+        const totalUnits = Math.max(0, latestMeter - opening);
+        const bill = calculateTangedcoBill(totalUnits, s);
+        const statusText = totalUnits > s.maxLimit
+          ? 'CRITICAL: Limit Exceeded!'
+          : totalUnits >= s.warnLimit
+            ? 'WARNING: Approaching Limit'
+            : 'SAFE: Within Limit';
+
+        const currentUrl = window.location.href;
+        const isLocal = window.location.protocol === 'file:' || window.location.hostname === 'localhost' || window.location.protocol === 'about:' || window.location.protocol === 'blob:';
+
+        const msg = [
+          `⚡ *TANGEDCO EB Meter Update*`,
+          `Cycle: ${formatDateLabel(s.cycleStart)} – ${formatDateLabel(s.cycleEnd)}`,
+          `Meter: ${latestMeter} kWh (Used: *${totalUnits} units*)`,
+          `Est. Bill: *${formatCurrency(bill.total)}*`,
+          `Status: ${statusText} (Limit: ${s.maxLimit}u)`,
+          ``,
+          `Open link to view chart & enter next reading:`,
+          currentUrl
+        ].join('\n');
+
+        return { msg, currentUrl, isLocal };
+      }
+
+      const shareModal = document.getElementById('shareModal');
+      function openShareModal() {
+        const { msg, isLocal } = buildSharePayload();
+        document.getElementById('sharePreviewText').value = msg;
+        document.getElementById('localFileNote').classList.toggle('hidden', !isLocal);
+        document.getElementById('btnLaunchWhatsApp').href = 'https://wa.me/?text=' + encodeURIComponent(msg);
+        shareModal.classList.remove('hidden');
+      }
+
+      document.getElementById('btnShareWhatsAppTop').addEventListener('click', openShareModal);
+      document.getElementById('btnWhatsAppInline').addEventListener('click', openShareModal);
+      document.getElementById('btnCloseShare').addEventListener('click', () => shareModal.classList.add('hidden'));
+
+      document.getElementById('btnCopyShareLink').addEventListener('click', () => {
+        const { currentUrl } = buildSharePayload();
+        copyTextSafe(currentUrl);
+      });
+      document.getElementById('btnCopyLinkInline').addEventListener('click', () => {
+        const { currentUrl } = buildSharePayload();
+        copyTextSafe(currentUrl);
+      });
+
+      // Export CSV
+      document.getElementById('btnExportCsv').addEventListener('click', () => {
+        const sorted = getSortedReadings();
+        const opening = Number(appState.settings.openingReading) || 0;
+        const lines = ['Timestamp,Meter_kWh,Units_Added,Cycle_Total_Units,Est_Bill_INR,Entered_By,Note'];
+        sorted.forEach((r, idx) => {
+          const prev = idx === 0 ? opening : sorted[idx - 1].meter;
+          const added = r.meter - prev;
+          const cum = Math.max(0, r.meter - opening);
+          const b = calculateTangedcoBill(cum, appState.settings).total.toFixed(2);
+          lines.push(`"${r.timestamp}",${r.meter},${added.toFixed(1)},${cum.toFixed(1)},${b},"${(r.author || '').replace(/"/g, '""')}","${(r.note || '').replace(/"/g, '""')}"`);
+        });
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tangedco_eb_log_${appState.settings.cycleStart}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        showToast('CSV exported!');
+      });
+
+      // Initial render
+      renderAll();
+    })();
+  </script>
+</body>
+</html>
