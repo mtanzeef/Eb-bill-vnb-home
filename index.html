@@ -33,6 +33,10 @@
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
+        <button id="syncStatusPill" type="button" title="Live Cloud Sync Status" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 transition">
+          <span id="syncDot" class="w-2 h-2 rounded-full bg-slate-400"></span>
+          <span id="syncLabel" class="hidden md:inline">Sync Off</span>
+        </button>
         <button id="btnOpenSettings" type="button" class="inline-flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-medium rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition">
           <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
           <span class="hidden sm:inline">Cycle & Limits</span>
@@ -386,6 +390,23 @@
           </div>
         </div>
 
+        <div class="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-xs font-semibold text-emerald-950">Live Cloud Sync (Free Firebase Realtime DB)</div>
+              <div class="text-xs text-emerald-800">Paste your Firebase Database URL so all phones sync live</div>
+            </div>
+            <span id="modalSyncBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Off</span>
+          </div>
+          <div class="flex gap-2">
+            <input id="setSyncUrl" type="url" placeholder="https://your-project-default-rtdb.firebaseio.com"
+              class="flex-1 px-3 py-1.5 rounded-lg border border-emerald-300 text-xs font-mono bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500" />
+            <button id="btnTestSync" type="button" class="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shrink-0 transition">
+              Test &amp; Pull
+            </button>
+          </div>
+        </div>
+
         <div class="flex items-center justify-end gap-2 pt-2">
           <button id="btnCancelSettings" type="button" class="px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50">Cancel</button>
           <button type="submit" class="px-4 py-2 text-sm font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700">Save Settings</button>
@@ -447,7 +468,8 @@
           budgetLimit: 1650,
           includeExtras: true,
           fixedCharge: 45,
-          fsaRate: 0.20
+          fsaRate: 0.20,
+          syncUrl: ''
         },
         readings: [
           { id: 'r1', timestamp: '2026-10-05T09:15:00', meter: 14242, author: 'Home', note: 'Cycle start check' },
@@ -509,9 +531,20 @@
         }
       }
 
+      function getSyncUrlFromQuery() {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          return params.get('sync') || '';
+        } catch (e) { return ''; }
+      }
+
       function loadInitialState() {
+        const querySync = getSyncUrlFromQuery();
         const fromHash = decodeStateFromHash(window.location.hash);
-        if (fromHash) return fromHash;
+        if (fromHash) {
+          if (querySync) fromHash.settings.syncUrl = querySync;
+          return fromHash;
+        }
         try {
           const raw = localStorage.getItem(STORAGE_KEY);
           if (raw) {
@@ -525,7 +558,9 @@
             }
           }
         } catch (e) {}
-        return JSON.parse(JSON.stringify(DEFAULT_STATE));
+        const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE));
+        if (querySync) fresh.settings.syncUrl = querySync;
+        return fresh;
       }
 
       function saveState() {
@@ -1066,17 +1101,19 @@
         const author = document.getElementById('readingAuthorInput').value.trim();
         const note = document.getElementById('readingNoteInput').value.trim();
 
-        appState.readings.push({
-          id: 'r_' + Date.now(),
+        const newEntry = {
+          id: 'r_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
           timestamp: ts,
           meter: Number(newMeter.toFixed(1)),
           author,
           note
-        });
+        };
+        appState.readings.push(newEntry);
         appState.isSample = false;
 
         saveState();
         renderAll();
+        pushReadingToCloud(newEntry);
         document.getElementById('readingValueInput').value = '';
         document.getElementById('readingNoteInput').value = '';
         showToast('Reading logged with automatic timestamp!');
@@ -1091,6 +1128,7 @@
         appState.isSample = false;
         saveState();
         renderAll();
+        deleteReadingFromCloud(id);
         showToast('Reading removed.');
       });
 
@@ -1099,6 +1137,7 @@
         appState.isSample = false;
         saveState();
         renderAll();
+        clearReadingsInCloud();
         showToast('Sample data cleared. Ready for your meter readings!');
       });
 
@@ -1107,6 +1146,7 @@
         appState.isSample = false;
         saveState();
         renderAll();
+        clearReadingsInCloud();
         showToast('All readings cleared.');
       });
 
@@ -1137,6 +1177,7 @@
         document.getElementById('setIncludeExtras').checked = !!s.includeExtras;
         document.getElementById('setFixedCharge').value = s.fixedCharge;
         document.getElementById('setFsaRate').value = s.fsaRate;
+        document.getElementById('setSyncUrl').value = s.syncUrl || '';
         settingsModal.classList.remove('hidden');
       });
 
@@ -1155,10 +1196,13 @@
           budgetLimit: parseFloat(document.getElementById('setBudgetLimit').value) || 1650,
           includeExtras: document.getElementById('setIncludeExtras').checked,
           fixedCharge: parseFloat(document.getElementById('setFixedCharge').value) || 0,
-          fsaRate: parseFloat(document.getElementById('setFsaRate').value) || 0
+          fsaRate: parseFloat(document.getElementById('setFsaRate').value) || 0,
+          syncUrl: cleanSyncBase(document.getElementById('setSyncUrl').value)
         };
         saveState();
         renderAll();
+        pushSettingsToCloud();
+        startLiveSyncLoop();
         closeSettings();
         showToast('Cycle & limit settings updated!');
       });
@@ -1241,8 +1285,158 @@
         showToast('CSV exported!');
       });
 
-      // Initial render
+      // --- Live Cloud Sync (Firebase Realtime Database REST API) ---
+      let syncTimer = null;
+      let isSyncing = false;
+
+      function cleanSyncBase(url) {
+        return String(url || '').trim().replace(/\/+$/, '');
+      }
+
+      function updateSyncIndicator(status, labelText) {
+        const dot = document.getElementById('syncDot');
+        const lbl = document.getElementById('syncLabel');
+        const badge = document.getElementById('modalSyncBadge');
+        if (status === 'connected') {
+          dot.className = 'w-2 h-2 rounded-full bg-emerald-500 animate-pulse';
+          lbl.textContent = labelText || 'Live Sync';
+          if (badge) { badge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-600 text-white'; badge.textContent = 'Connected'; }
+        } else if (status === 'error') {
+          dot.className = 'w-2 h-2 rounded-full bg-rose-500';
+          lbl.textContent = labelText || 'Sync Error';
+          if (badge) { badge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-600 text-white'; badge.textContent = 'Error'; }
+        } else {
+          dot.className = 'w-2 h-2 rounded-full bg-slate-400';
+          lbl.textContent = 'Sync Off';
+          if (badge) { badge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700'; badge.textContent = 'Off'; }
+        }
+      }
+
+      async function pullFromCloud(silent = true) {
+        const base = cleanSyncBase(appState.settings.syncUrl);
+        if (!base || !base.startsWith('https://')) {
+          updateSyncIndicator('off');
+          return false;
+        }
+        if (isSyncing) return false;
+        isSyncing = true;
+        try {
+          const res = await fetch(`${base}/eb_tracker.json`, { cache: 'no-store' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+          if (data) {
+            if (data.settings) {
+              appState.settings = { ...appState.settings, ...data.settings, syncUrl: base };
+            }
+            if (data.readings && typeof data.readings === 'object') {
+              appState.readings = Object.values(data.readings).filter(Boolean);
+              appState.isSample = false;
+            } else if (data.readings === null && data.cleared) {
+              appState.readings = [];
+              appState.isSample = false;
+            }
+            saveState();
+            renderAll();
+          }
+          updateSyncIndicator('connected', 'Live');
+          if (!silent) showToast('Synced with cloud database!');
+          return true;
+        } catch (err) {
+          updateSyncIndicator('error', 'Sync Error');
+          if (!silent) showToast('Sync failed. Check your Firebase URL & rules.', 'error');
+          return false;
+        } finally {
+          isSyncing = false;
+        }
+      }
+
+      async function pushReadingToCloud(reading) {
+        const base = cleanSyncBase(appState.settings.syncUrl);
+        if (!base || !base.startsWith('https://')) return;
+        try {
+          await fetch(`${base}/eb_tracker/readings/${encodeURIComponent(reading.id)}.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(reading)
+          });
+          await fetch(`${base}/eb_tracker/cleared.json`, { method: 'PUT', body: 'false' });
+          updateSyncIndicator('connected', 'Live');
+        } catch (e) {
+          updateSyncIndicator('error', 'Sync Error');
+        }
+      }
+
+      async function deleteReadingFromCloud(id) {
+        const base = cleanSyncBase(appState.settings.syncUrl);
+        if (!base || !base.startsWith('https://')) return;
+        try {
+          await fetch(`${base}/eb_tracker/readings/${encodeURIComponent(id)}.json`, { method: 'DELETE' });
+        } catch (e) {}
+      }
+
+      async function clearReadingsInCloud() {
+        const base = cleanSyncBase(appState.settings.syncUrl);
+        if (!base || !base.startsWith('https://')) return;
+        try {
+          await fetch(`${base}/eb_tracker/readings.json`, { method: 'DELETE' });
+          await fetch(`${base}/eb_tracker/cleared.json`, { method: 'PUT', body: 'true' });
+        } catch (e) {}
+      }
+
+      async function pushSettingsToCloud() {
+        const base = cleanSyncBase(appState.settings.syncUrl);
+        if (!base || !base.startsWith('https://')) return;
+        try {
+          const payload = { ...appState.settings };
+          delete payload.syncUrl;
+          await fetch(`${base}/eb_tracker/settings.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          updateSyncIndicator('connected', 'Live');
+        } catch (e) {
+          updateSyncIndicator('error', 'Sync Error');
+        }
+      }
+
+      function startLiveSyncLoop() {
+        if (syncTimer) clearInterval(syncTimer);
+        const base = cleanSyncBase(appState.settings.syncUrl);
+        if (!base || !base.startsWith('https://')) {
+          updateSyncIndicator('off');
+          return;
+        }
+        pullFromCloud(true);
+        syncTimer = setInterval(() => pullFromCloud(true), 5000);
+      }
+
+      document.getElementById('syncStatusPill').addEventListener('click', () => {
+        if (cleanSyncBase(appState.settings.syncUrl)) {
+          pullFromCloud(false);
+        } else {
+          document.getElementById('btnOpenSettings').click();
+        }
+      });
+
+      document.getElementById('btnTestSync').addEventListener('click', async () => {
+        const url = cleanSyncBase(document.getElementById('setSyncUrl').value);
+        if (!url.startsWith('https://')) {
+          showToast('Please enter a valid https:// Firebase Realtime DB URL.', 'error');
+          return;
+        }
+        appState.settings.syncUrl = url;
+        saveState();
+        const ok = await pullFromCloud(false);
+        if (ok) {
+          await pushSettingsToCloud();
+          startLiveSyncLoop();
+        }
+      });
+
+      // Initial render & start live sync if configured
       renderAll();
+      startLiveSyncLoop();
     })();
   </script>
 </body>
